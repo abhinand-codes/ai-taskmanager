@@ -1,25 +1,83 @@
 # AI TaskManager
 
-A Laravel 12 task management system with AI-powered summaries using Google Gemini.
+A Laravel 12 task management system with AI-powered summaries and priority suggestions using Google Gemini.
 
 ## Stack
 
-- Laravel 12, PHP 8.2
+- Laravel 12, PHP 8.3
 - Vue 3 + Inertia.js + Tailwind CSS
 - MySQL 8
 - Docker + Nginx
-- Google Gemini AI
-- Pest (testing)
+- Google Gemini AI (`gemini-1.5-flash`)
+- Pest (feature testing)
 
 ## Architecture
+```
+app/
+├── Http/
+│   ├── Controllers/        # TaskController, DashboardController
+│   ├── Requests/           # StoreTaskRequest, UpdateTaskRequest
+│   ├── Resources/          # TaskResource
+│   └── Middleware/
+├── Models/                 # User, Task
+├── Repositories/
+│   ├── Contracts/          # TaskRepositoryInterface
+│   └── Eloquent/           # TaskRepository
+├── Services/
+│   ├── TaskService.php     # Business logic, transactions
+│   └── AIService.php       # Gemini API, prompt, parsing
+├── Jobs/
+│   └── GenerateAISummaryJob.php
+├── Policies/
+│   └── TaskPolicy.php
+├── Enums/
+│   ├── TaskPriority.php
+│   ├── TaskStatus.php
+│   └── AIPriority.php
+└── Providers/
+    └── RepositoryServiceProvider.php
+```
 
-Repository → Service → Controller → Resource → Inertia (Vue)
+**Flow:** Request → FormRequest (validate) → Controller → Service → Repository → Model
 
-- `app/Repositories/` — data access layer
-- `app/Services/` — business logic
-- `app/Policies/` — authorization
-- `app/Jobs/` — async AI summary generation
-- `app/Http/Resources/` — API transformation
+No direct Eloquent calls in controllers. All data access goes through the Repository layer.
+
+## AI Integration
+
+### Provider
+Google Gemini (`gemini-1.5-flash`) via HTTP API.
+
+### Trigger
+AI summary is generated automatically when a task is **created** or when its **title/description is updated**. It runs as an async queued job (`GenerateAISummaryJob`) so it never blocks the HTTP response.
+
+### Exact Prompt Sent to Gemini
+```
+Analyze this task and provide:
+1. A brief 1-2 sentence summary of what needs to be done
+2. A suggested priority level (low, medium, or high) based on the task details
+
+Task Title: {title}
+Task Description: {description}
+
+Respond in this exact JSON format:
+{
+  "summary": "your summary here",
+  "priority": "low|medium|high"
+}
+```
+
+### Response Parsing
+The AIService parses the JSON response, extracts `summary` and `priority`, and updates the task via the repository. If the API call fails or returns malformed JSON, a mock fallback response is used — ensuring the task is never left without an AI summary.
+
+### Mock Fallback
+```php
+return [
+    'ai_summary'  => 'Task requires attention. Please review and complete as soon as possible.',
+    'ai_priority' => 'medium',
+];
+```
+
+Set `AI_MOCK_MODE=true` in `.env` to always use the mock (useful for local dev without an API key).
 
 ## Setup
 
@@ -41,7 +99,7 @@ docker exec taskmanager_app npm install
 docker exec taskmanager_app npm run build
 ```
 
-Visit: http://localhost:8080
+Visit: **http://localhost:8080**
 
 ## Credentials
 
@@ -53,23 +111,43 @@ Visit: http://localhost:8080
 
 ## Features
 
-- **Admin**: Create, edit, delete, assign tasks
-- **User**: View and update status of assigned tasks
-- **AI**: Gemini generates summary and priority suggestion per task
-- **Queue**: AI job runs async via database queue worker
-- **Dashboard**: Stats cards + Chart.js doughnut chart
-- **Filters**: Search, status, priority filtering with pagination
+| Feature | Details |
+|---------|---------|
+| **Admin** | Create, edit, delete, assign any task |
+| **User** | View and update status of assigned tasks only |
+| **AI Summary** | Gemini generates a summary + priority on task create/update |
+| **Queue** | AI job runs async via database queue worker |
+| **Dashboard** | Stats cards (total, completed, pending, high priority) + Chart.js doughnut |
+| **Filters** | Search by title, filter by status and priority, paginated |
+| **Policies** | TaskPolicy enforces role-based access on every action |
+| **Caching** | Dashboard stats cached for 5 minutes via `Cache::remember` |
+
+## API Endpoints
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/tasks` | List tasks with filters | ✅ |
+| POST | `/tasks` | Create task | Admin |
+| GET | `/tasks/{id}` | View task detail | ✅ |
+| PUT | `/tasks/{id}` | Update task | Admin |
+| DELETE | `/tasks/{id}` | Delete task (soft) | Admin |
+| PATCH | `/tasks/{id}/status` | Update status | Assigned user |
+| GET | `/tasks/{id}/ai-summary` | Get AI summary | ✅ |
 
 ## Testing
 ```bash
 docker exec taskmanager_app php artisan test
 ```
 
-15 tests, 52 assertions — all passing.
+**40 tests, 113 assertions — all passing.**
 
-## AI Integration
+Covers: authentication, role-based access, CRUD operations, policy enforcement, validation.
 
-- Provider: Google Gemini (`gemini-1.5-flash`)
-- Triggered on task create and title/description update
-- Falls back to mock response if API unavailable
-- Set `AI_MOCK_MODE=true` to disable real API calls
+## Bonus Features Completed
+
+- ✅ Queued AI job (`GenerateAISummaryJob`) with retry logic (3 attempts, 10s backoff)
+- ✅ Repository caching on dashboard stats
+- ✅ 40 feature tests with Pest
+- ✅ Docker (app, nginx, mysql, queue worker — 4 containers)
+- ✅ Clean conventional commits
+- ✅ Soft deletes on tasks
