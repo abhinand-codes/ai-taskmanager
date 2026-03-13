@@ -2,6 +2,23 @@
 
 A Laravel 12 task management system with AI-powered summaries and priority suggestions using Google Gemini.
 
+## Screenshots
+
+### Login
+![Login](https://github.com/user-attachments/assets/8611b1b8-0a58-46be-9bf5-6678b7b51d1d)
+
+### Dashboard
+![Dashboard](https://github.com/user-attachments/assets/e0a4efe8-b440-4d3a-805e-7d551c752346)
+
+### Tasks List
+![Tasks List](https://github.com/user-attachments/assets/16a8d7f0-a46a-48c4-9a67-a0821a0fda65)
+
+### Create Task
+![Create Task](https://github.com/user-attachments/assets/6ea5027d-a269-446a-9843-32de09ea2adb)
+
+### Task Detail with AI Summary
+![Task Detail](https://github.com/user-attachments/assets/383325a6-f82f-426d-80f7-19ce13ab561b)
+
 ## Stack
 
 - Laravel 12, PHP 8.3
