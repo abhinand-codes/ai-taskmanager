@@ -6,13 +6,17 @@ use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
 use App\Http\Resources\TaskResource;
 use App\Models\Task;
+use App\Models\User;
 use App\Services\TaskService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class TaskController extends Controller
 {
+    use AuthorizesRequests;
+
     public function __construct(private TaskService $taskService) {}
 
     public function index(Request $request): Response
@@ -23,8 +27,12 @@ class TaskController extends Controller
             $request->only(['status', 'priority', 'search'])
         );
 
+        $tasksData = TaskResource::collection($tasks)->response()->getData(true);
+
         return Inertia::render('Tasks/Index', [
-            'tasks'   => TaskResource::collection($tasks),
+            'tasks'   => array_merge($tasksData, [
+                'links' => $tasks->linkCollection()->toArray(),
+            ]),
             'filters' => $request->only(['status', 'priority', 'search']),
         ]);
     }
@@ -33,7 +41,7 @@ class TaskController extends Controller
     {
         $this->authorize('create', Task::class);
 
-        $users = \App\Models\User::select('id', 'name', 'email')->get();
+        $users = User::select('id', 'name', 'email')->get();
 
         return Inertia::render('Tasks/Form', [
             'users' => $users,
@@ -42,54 +50,49 @@ class TaskController extends Controller
 
     public function store(StoreTaskRequest $request)
     {
-        $this->authorize('create', Task::class);
-
         $this->taskService->store($request->validated());
 
         return redirect()->route('tasks.index')
             ->with('success', 'Task created successfully.');
     }
 
-    public function show(int $id): Response
+    public function show(Task $task): Response
     {
-        $task = $this->taskService->find($id);
+        $task->load(['assignedUser', 'creator']);
         $this->authorize('view', $task);
 
         return Inertia::render('Tasks/Show', [
-            'task' => new TaskResource($task),
+            'task' => (new TaskResource($task))->resolve(),
         ]);
     }
 
-    public function edit(int $id): Response
+    public function edit(Task $task): Response
     {
-        $task = $this->taskService->find($id);
+        $task->load(['assignedUser', 'creator']);
         $this->authorize('update', $task);
 
-        $users = \App\Models\User::select('id', 'name', 'email')->get();
+        $users = User::select('id', 'name', 'email')->get();
 
         return Inertia::render('Tasks/Form', [
-            'task'  => new TaskResource($task),
+            'task'  => (new TaskResource($task))->resolve(),
             'users' => $users,
         ]);
     }
 
-    public function update(UpdateTaskRequest $request, int $id)
+    public function update(UpdateTaskRequest $request, Task $task)
     {
-        $task = $this->taskService->find($id);
-        $this->authorize('update', $task);
-
-        $this->taskService->update($id, $request->validated());
+        // Authorization handled in UpdateTaskRequest
+        $this->taskService->update($task->id, $request->validated());
 
         return redirect()->route('tasks.index')
             ->with('success', 'Task updated successfully.');
     }
 
-    public function destroy(int $id)
+    public function destroy(Task $task)
     {
-        $task = $this->taskService->find($id);
         $this->authorize('delete', $task);
 
-        $this->taskService->delete($id);
+        $this->taskService->delete($task->id);
 
         return redirect()->route('tasks.index')
             ->with('success', 'Task deleted successfully.');

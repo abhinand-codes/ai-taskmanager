@@ -2,28 +2,30 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateTaskRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return false;
+        $task = $this->route('task');
+
+        if (!$task) {
+            return false;
+        }
+
+        return $this->user()?->can('update', $task) ?? false;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
-            //
+            'title'       => ['sometimes', 'required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'priority'    => ['sometimes', 'required', 'in:low,medium,high'],
+            'status'      => ['sometimes', 'required', 'in:pending,in_progress,completed'],
+            'due_date'    => ['nullable', 'date'],
+            'assigned_to' => ['nullable', 'exists:users,id'],
         ];
     }
 }

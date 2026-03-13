@@ -3,17 +3,17 @@
 namespace App\Services;
 
 use App\Jobs\GenerateAISummaryJob;
+use App\Models\Task;
 use App\Repositories\Contracts\TaskRepositoryInterface;
-use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use App\Models\Task;
 
 class TaskService
 {
     public function __construct(
-        private TaskRepositoryInterface $repo,
-        private AIService $aiService
+        private TaskRepositoryInterface $taskRepository,
+        private AIService $aiService,
     ) {}
 
     public function index(array $filters = []): LengthAwarePaginator
@@ -22,7 +22,7 @@ class TaskService
             $filters['assigned_to'] = Auth::id();
         }
 
-        return $this->repo->all($filters);
+        return $this->taskRepository->all($filters);
     }
 
     public function store(array $data): Task
@@ -30,7 +30,7 @@ class TaskService
         return DB::transaction(function () use ($data) {
             $data['created_by'] = Auth::id();
 
-            $task = $this->repo->create($data);
+            $task = $this->taskRepository->create($data);
 
             GenerateAISummaryJob::dispatch($task)->onQueue('default');
 
@@ -40,34 +40,36 @@ class TaskService
 
     public function update(int $id, array $data): Task
     {
-        return DB::transaction(function () use ($id, $data) {
-            $task = $this->repo->update($id, $data);
+        $task = $this->taskRepository->find($id);
 
-            if (isset($data['title']) || isset($data['description'])) {
-                GenerateAISummaryJob::dispatch($task)->onQueue('default');
-            }
+        $needsAI = isset($data['title']) || isset($data['description']);
 
-            return $task;
-        });
+        $updated = $this->taskRepository->update($id, $data);
+
+        if ($needsAI) {
+            GenerateAISummaryJob::dispatch($updated)->onQueue('default');
+        }
+
+        return $updated;
     }
 
     public function updateStatus(int $id, string $status): Task
     {
-        return $this->repo->update($id, ['status' => $status]);
+        return $this->taskRepository->update($id, ['status' => $status]);
     }
 
     public function delete(int $id): bool
     {
-        return $this->repo->delete($id);
+        return $this->taskRepository->delete($id);
     }
 
     public function find(int $id): Task
     {
-        return $this->repo->find($id);
+        return $this->taskRepository->find($id);
     }
 
     public function getStats(): array
     {
-        return $this->repo->getStats();
+        return $this->taskRepository->getStats();
     }
 }

@@ -4,19 +4,17 @@ namespace App\Repositories\Eloquent;
 
 use App\Models\Task;
 use App\Repositories\Contracts\TaskRepositoryInterface;
-use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 
 class TaskRepository implements TaskRepositoryInterface
 {
     public function all(array $filters = []): LengthAwarePaginator
     {
-        return Task::query()
-            ->with(['assignedUser', 'creator'])
+        return Task::with(['assignedUser', 'creator'])
             ->filter($filters)
             ->latest()
-            ->paginate(10)
-            ->withQueryString();
+            ->paginate(10);
     }
 
     public function find(int $id): Task
@@ -39,8 +37,9 @@ class TaskRepository implements TaskRepositoryInterface
 
     public function delete(int $id): bool
     {
+        $task = $this->find($id);
         $this->clearCache();
-        return Task::destroy($id) > 0;
+        return $task->delete();
     }
 
     public function getStats(): array
